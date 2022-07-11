@@ -17,7 +17,9 @@ root.render(<App />);
 
 This causes big headaches for libraries attempting to support multiple major versions of React!
 
-## Why?
+The fix described in this document is implemented here: https://github.com/cypress-io/cypress/pull/22437.
+
+## Why is this a problem?
 
 Our React adapter:
 
@@ -164,7 +166,7 @@ These can be nested in conditionals, and work in `try/catch`:
 try {
   const reactDomImport = react.version > 17 
     ? () = import('react-dom/client')
-    : () = import('react-dom/client')
+    : () = import('react-dom')
   await reactDomImport()
 
 } catch (e) {
@@ -173,3 +175,48 @@ try {
 ```
 
 This works fine with native ESM. Bundlers are a different story.
+
+## Bundlers and the Dependency Graph
+
+Both Vite and Webpack will crawl the source code and complain if they cannot find all required modules. This means 
+
+```js
+const reactDomImport = react.version > 17 
+  ? () = import('react-dom/client')
+  : () = import('react-dom')
+```
+
+Is a problem - any project on React <= 17 won't have `react-dom/client`, and will error out. Never mind that code will never actually execute - bundlers don't consider this.
+
+So, the solution is to proactively tell the bundlers to ignore that module.
+
+- Webpack: `IgnorePlugin`. [Docs](https://webpack.js.org/plugins/ignore-plugin/)
+- Vite: Write a simple plugin
+
+```js
+// Webpack
+return new webpackModule.IgnorePlugin({
+  resourceRegExp: /react-dom\/client$/,
+  contextRegExp: /cypress/,
+})
+
+
+// Vite
+export const React18 = (projectRoot: string): Plugin => {
+  return {
+    name: 'cypress:missing-react-dom-client',
+    resolveId (source: string) {
+      if (source === 'react-dom/client') {
+        try {
+          return require.resolve('react-dom/client', { paths: [projectRoot] })
+        } catch (e) {
+          // This is not a react 18 project, need to stub out to avoid error
+          return path.resolve(__dirname, '..', '..', 'client', 'reactDomClientPlaceholder.js')
+        }
+      }
+    },
+  }
+}
+```
+
+This works! Maybe not ideal at first glance - complex, a bit of hack - but this is the decision we make when we opt into providing a simple, "just works" development experience - we absorb some technical debt, so our users don't need to.
