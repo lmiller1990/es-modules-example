@@ -9,6 +9,6 @@ module.exports = {
   entry: "./webpack-main.js",
   mode: "development",
   plugins: [
-    ignorePlugin
+    // ignorePlugin
   ]
 }

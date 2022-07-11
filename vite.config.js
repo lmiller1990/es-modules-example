@@ -18,6 +18,6 @@ const ignoreBrokenPlugin = (projectRoot) => {
 
 export default {
   plugins: [
-    ignoreBrokenPlugin()
+    // ignoreBrokenPlugin()
   ]
 }
